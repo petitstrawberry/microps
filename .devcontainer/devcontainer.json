@@ -1,0 +1,21 @@
+{
+    "name": "microps Dev Container",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": "."
+    },
+    "runArgs": [
+        "--privileged" ,
+        "--cap-add=NET_ADMIN",
+        "--name=microps"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools-extension-pack"
+            ]
+        }
+    },
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+}
