@@ -9,7 +9,7 @@
 #include "util.h"
 
 struct ip_hdr {
-    uint8_t vhl;
+    uint8_t vhl; /* version and header length */
     uint8_t tos;
     uint16_t total;
     uint16_t id;
@@ -61,7 +61,7 @@ static void ip_dump(const uint8_t *data, size_t len) {
     uint8_t v, hl, hlen;
     uint16_t total, offset;
     char addr[IP_ADDR_STR_LEN];
-    
+
     flockfile(stderr);
     hdr = (struct ip_hdr *)data;
     v = (hdr->vhl & 0xf0) >> 4;
@@ -88,8 +88,48 @@ static void ip_dump(const uint8_t *data, size_t len) {
 }
 
 static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
-    debugf("dev=%s, len=%zu", dev->name, len);
-    debugdump(data, len);
+    struct ip_hdr *hdr;
+    uint8_t v;
+    uint16_t hlen, total, offset;
+
+    if (len < IP_HDR_SIZE_MIN) {
+        errorf("too short");
+        return;
+    }
+    hdr = (struct ip_hdr *)data;
+
+    v = (hdr->vhl & 0xf0) >> 4;
+    if (v != IP_VERSION_IPV4) {
+        errorf("unsupported version: %u", v);
+        return;
+    }
+ 
+    hlen = (hdr->vhl & 0x0f) << 2;
+    if (len < hlen) {
+        errorf("too short for header length: %u", hlen);
+        return;
+    }
+ 
+    total = ntoh16(hdr->total);
+    if (len < total) {
+        errorf("too short for total length: %u", total);
+        return;
+    }
+    
+    uint16_t sum = cksum16((uint16_t *)data, hlen, 0);
+    if (sum != 0) {
+        errorf("invalid checksum: hdr->sum=0x%04x, calc=0x%04x", ntoh16(hdr->sum), sum);
+        return;
+    }
+
+    offset = ntoh16(hdr->offset);
+    if (offset & 0x2000 || offset & 0x1fff) {
+        errorf("fragments does not support");
+        return;
+    }
+
+    debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
+    ip_dump(data, total);
 }
 
 int ip_init(void) {
