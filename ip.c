@@ -92,12 +92,70 @@ static void ip_dump(const uint8_t *data, size_t len) {
     funlockfile(stderr);
 }
 
-struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {}
+struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {
+    struct ip_iface *iface;
+
+    iface = memory_alloc(sizeof(*iface));
+    if (!iface) {
+        errorf("memory_alloc() failure");
+        return NULL;
+    }
+    NET_IFACE(iface)->family = NET_IFACE_FAMILY_IP;
+
+    if (ip_addr_pton(unicast, &iface->unicast) == -1) {
+        errorf("invalid unicast address: %s", unicast);
+        memory_free(iface);
+        return NULL;
+    }
+
+    if (ip_addr_pton(netmask, &iface->netmask) == -1) {
+        errorf("invalid netmask address: %s", netmask);
+        memory_free(iface);
+        return NULL;
+    }
+
+    iface->broadcast = iface->unicast | ~iface->netmask;
+
+    return iface;
+}
 
 /* NOTE: must not be call after net_run() */
-int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {}
+int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
+    char addr3[IP_ADDR_STR_LEN];
 
-struct ip_iface *ip_iface_select(ip_addr_t addr) {}
+    // Register the interface to the device
+    if (net_device_add_iface(dev, NET_IFACE(iface)) == -1) {
+        errorf("net_device_add_iface() failure, dev=%s, family=%d",
+               dev->name, NET_IFACE(iface)->family);
+        memory_free(iface);
+        return -1;
+    }
+
+    // Add the interface to the global list
+    iface->next = ifaces;
+    ifaces = iface;
+
+    infof("registered: dev=%s, unicast=%s, netmask=%s, broadcast=%s", dev->name,
+          ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)),
+          ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)),
+          ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
+    return 0;
+}
+
+struct ip_iface *ip_iface_select(ip_addr_t addr) {
+    struct ip_iface *iface = ifaces;
+
+    while (iface != NULL) {
+        if ((iface->unicast & iface->netmask) == (addr & iface->netmask)) {
+            return iface;
+        }
+        iface = iface->next;
+    }
+
+    return NULL;
+}
 
 static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
     struct ip_hdr *hdr;
