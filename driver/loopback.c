@@ -30,7 +30,7 @@ static int loopback_transmit(struct net_device *dev, uint16_t type,
     struct loopback_queue_entry *entry;
     unsigned int num;
 
-    mutex_lock(&PRIV(dev)->mutex);
+    mutex_lock(&PRIV(dev)->mutex); // Lock mutex before accessing the queue
     if (PRIV(dev)->queue.num >= LOOPBACK_QUEUE_LIMIT) {
         mutex_unlock(&PRIV(dev)->mutex);
         errorf("queue is full");
@@ -49,7 +49,7 @@ static int loopback_transmit(struct net_device *dev, uint16_t type,
     
     queue_push(&PRIV(dev)->queue, entry);
     num = PRIV(dev)->queue.num;
-    mutex_unlock(&PRIV(dev)->mutex);
+    mutex_unlock(&PRIV(dev)->mutex); // Unlock mutex after pushing to queue
     
     debugf("queue pushed (num:%u), dev=%s, type=0x%04x, len=%zd", num,
            dev->name, type, len);
