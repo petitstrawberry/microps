@@ -30,13 +30,13 @@ static int loopback_transmit(struct net_device *dev, uint16_t type,
     struct loopback_queue_entry *entry;
     unsigned int num;
 
-    mutex_lock(&PRIV(dev)->mutex); // Lock mutex before accessing the queue
+    mutex_lock(&PRIV(dev)->mutex);  // Lock mutex before accessing the queue
     if (PRIV(dev)->queue.num >= LOOPBACK_QUEUE_LIMIT) {
         mutex_unlock(&PRIV(dev)->mutex);
         errorf("queue is full");
         return -1;
     }
-    
+
     entry = memory_alloc(sizeof(*entry) + len);
     if (!entry) {
         mutex_unlock(&PRIV(dev)->mutex);
@@ -46,20 +46,41 @@ static int loopback_transmit(struct net_device *dev, uint16_t type,
     entry->type = type;
     entry->len = len;
     memcpy(entry->data, data, len);
-    
+
     queue_push(&PRIV(dev)->queue, entry);
     num = PRIV(dev)->queue.num;
-    mutex_unlock(&PRIV(dev)->mutex); // Unlock mutex after pushing to queue
-    
+    mutex_unlock(&PRIV(dev)->mutex);  // Unlock mutex after pushing to queue
+
     debugf("queue pushed (num:%u), dev=%s, type=0x%04x, len=%zd", num,
            dev->name, type, len);
     debugdump(data, len);
-    
+
     intr_raise_irq(PRIV(dev)->irq);
     return 0;
 }
 
-static int loopback_isr(unsigned int irq, void *id) {}
+static int loopback_isr(unsigned int irq, void *id) {
+    struct net_device *dev;
+    struct loopback_queue_entry *entry;
+
+    dev = (struct net_device *)id;
+    
+    mutex_lock(&PRIV(dev)->mutex); // Lock mutex to safely access the queue
+    while (1) {
+        entry = queue_pop(&PRIV(dev)->queue);
+        if (!entry) {
+            break;
+        }
+        debugf("queue popped (num:%u), dev=%s, type=0x%04x, len=%zd",
+               PRIV(dev)->queue.num, dev->name, entry->type, entry->len);
+        debugdump(entry->data, entry->len);
+        net_input_handler(entry->type, entry->data, entry->len, dev);
+        memory_free(entry);
+    }
+    mutex_unlock(&PRIV(dev)->mutex); // Unlock mutex after processing the queue
+
+    return 0;
+}
 
 static struct net_device_ops loopback_ops = {
     .transmit = loopback_transmit,
