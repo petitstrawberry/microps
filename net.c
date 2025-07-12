@@ -114,7 +114,30 @@ int net_device_output(struct net_device *dev, uint16_t type,
 /* NOTE: must not be call after net_run() */
 int net_protocol_register(uint16_t type,
                           void (*handler)(const uint8_t *data, size_t len,
-                                          struct net_device *dev)) {}
+                                          struct net_device *dev)) {
+    struct net_protocol *proto;
+
+    for (proto = protocols; proto; proto = proto->next) {
+        // Check if the protocol type is already registered
+        if (type == proto->type) {
+            errorf("already registered, type=0x%04x", type);
+            return -1;
+        }
+    }
+
+    proto = memory_alloc(sizeof(*proto));
+    if (!proto) {
+        errorf("memory_alloc() failure");
+        return -1;
+    }
+    proto->type = type;
+    proto->handler = handler;
+    proto->next = protocols;
+    protocols = proto;
+
+    infof("registered, type=0x%04x", type);
+    return 0;
+}
 
 int net_input_handler(uint16_t type, const uint8_t *data, size_t len,
                       struct net_device *dev) {
