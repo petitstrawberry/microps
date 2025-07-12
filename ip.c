@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "net.h"
+#include "platform.h"
 #include "util.h"
 
 struct ip_hdr {
@@ -24,6 +25,10 @@ struct ip_hdr {
 
 const ip_addr_t IP_ADDR_ANY = 0x00000000;       /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
+
+/* NOTE: if you want to add/delete the entries after net_run(), you need to
+ * protect these lists with a mutex. */
+static struct ip_iface *ifaces;
 
 int ip_addr_pton(const char *p, ip_addr_t *n) {
     char *sp, *ep;
@@ -87,6 +92,13 @@ static void ip_dump(const uint8_t *data, size_t len) {
     funlockfile(stderr);
 }
 
+struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {}
+
+/* NOTE: must not be call after net_run() */
+int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {}
+
+struct ip_iface *ip_iface_select(ip_addr_t addr) {}
+
 static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
     struct ip_hdr *hdr;
     uint8_t v;
@@ -103,22 +115,23 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
         errorf("unsupported version: %u", v);
         return;
     }
- 
+
     hlen = (hdr->vhl & 0x0f) << 2;
     if (len < hlen) {
         errorf("too short for header length: %u", hlen);
         return;
     }
- 
+
     total = ntoh16(hdr->total);
     if (len < total) {
         errorf("too short for total length: %u", total);
         return;
     }
-    
+
     uint16_t sum = cksum16((uint16_t *)data, hlen, 0);
     if (sum != 0) {
-        errorf("invalid checksum: hdr->sum=0x%04x, calc=0x%04x", ntoh16(hdr->sum), sum);
+        errorf("invalid checksum: hdr->sum=0x%04x, calc=0x%04x",
+               ntoh16(hdr->sum), sum);
         return;
     }
 
