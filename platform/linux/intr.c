@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "net.h"
 #include "platform.h"
 #include "util.h"
 
@@ -58,9 +59,7 @@ int intr_request_irq(unsigned int irq,
     return 0;
 }
 
-int intr_raise_irq(unsigned int irq) {
-    return pthread_kill(tid, (int)irq);
-}
+int intr_raise_irq(unsigned int irq) { return pthread_kill(tid, (int)irq); }
 
 static void *intr_thread(void *arg) {
     int terminate = 0, sig, err;
@@ -90,7 +89,7 @@ static void *intr_thread(void *arg) {
         }
     }
     debugf("terminated");
-    
+
     return NULL;
 }
 
