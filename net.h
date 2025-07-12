@@ -35,6 +35,7 @@
 
 struct net_device {
     struct net_device *next;
+    struct net_iface *ifaces; /* NOTE: if you want to add/delete the entries after net_run(), you need to protect ifaces with a mutex. */
     unsigned int index;
     char name[IFNAMSIZ];
     uint16_t type;
