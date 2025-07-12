@@ -127,8 +127,8 @@ int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
 
     // Register the interface to the device
     if (net_device_add_iface(dev, NET_IFACE(iface)) == -1) {
-        errorf("net_device_add_iface() failure, dev=%s, family=%d",
-               dev->name, NET_IFACE(iface)->family);
+        errorf("net_device_add_iface() failure, dev=%s, family=%d", dev->name,
+               NET_IFACE(iface)->family);
         memory_free(iface);
         return -1;
     }
@@ -161,6 +161,8 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
     struct ip_hdr *hdr;
     uint8_t v;
     uint16_t hlen, total, offset;
+    struct ip_iface *iface;
+    char addr[IP_ADDR_STR_LEN];
 
     if (len < IP_HDR_SIZE_MIN) {
         errorf("too short");
@@ -199,7 +201,27 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
         return;
     }
 
-    debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
+    // Filter interfaces by destination address
+    iface = ip_iface_select(hdr->dst);
+    if (!iface) {
+        errorf("no matching interface for destination address: %s",
+               ip_addr_ntop(hdr->dst, addr, sizeof(addr)));
+        return;
+    }
+    // Check if the interface is for this device
+    if (iface->unicast != hdr->dst && hdr->dst != 0xffffffff &&
+        iface->broadcast != hdr->dst) {
+        errorf(
+            "not for this interface: dev=%s, unicast=%s, broadcast=%s, dst=%s",
+            dev->name, ip_addr_ntop(iface->unicast, addr, sizeof(addr)),
+            ip_addr_ntop(iface->broadcast, addr, sizeof(addr)),
+            ip_addr_ntop(hdr->dst, addr, sizeof(addr)));
+        return;
+    }
+
+    debugf("dev=%s, iface=%s, protocol=%u, total=%u", dev->name,
+           ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol,
+           total);
     ip_dump(data, total);
 }
 
