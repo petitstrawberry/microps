@@ -291,7 +291,7 @@ static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
     // Calculate the checksum
     hdr->sum = cksum16((uint16_t *)buf, hlen, 0);
     // Validate the checksum
-    if (checksum16((uint16_t *)buf, hlen, hdr->sum) != 0) {
+    if (cksum16((uint16_t *)buf, hlen, hdr->sum) != 0) {
         errorf("invalid checksum: hdr->sum=0x%04x", ntoh16(hdr->sum));
         return -1;
     }
