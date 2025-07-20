@@ -52,7 +52,7 @@ static char *icmp_type_ntoa(uint8_t type) {
 static void icmp_dump(const uint8_t *data, size_t len) {
     struct icmp_hdr *hdr;
     struct icmp_echo *echo;
-    
+
     flockfile(stderr);
     hdr = (struct icmp_hdr *)data;
     fprintf(stderr, " type: %u (%s)\n", hdr->type, icmp_type_ntoa(hdr->type));
@@ -77,11 +77,25 @@ static void icmp_dump(const uint8_t *data, size_t len) {
 
 void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst,
                 struct ip_iface *iface) {
+    struct icmp_hdr *hdr;
     char addr1[IP_ADDR_STR_LEN];
     char addr2[IP_ADDR_STR_LEN];
+
+    // Validate length
+    if (len < ICMP_HDR_SIZE) {
+        errorf("too short");
+        return;
+    }
+    // Validate checksum
+    hdr = (struct icmp_hdr *)data;
+    if (cksum16((uint16_t *)data, len, 0) != 0) {
+        errorf("invalid checksum: hdr->sum=0x%04x", ntoh16(hdr->sum));
+        return;
+    }
+
     debugf("%s => %s, len=%zu", ip_addr_ntop(src, addr1, sizeof(addr1)),
            ip_addr_ntop(dst, addr2, sizeof(addr2)), len);
-    debugdump(data, len);
+    icmp_dump(data, len);
 }
 
 int icmp_init(void) {
