@@ -290,7 +290,7 @@ static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
         }
     }
 
-    return net_device_output(NET_IFACE(iface)->dev, hwaddr, data, len, dst);
+    return net_device_output(NET_IFACE(iface)->dev, NET_PROTOCOL_TYPE_IP, data, len, hwaddr);
 }
 
 static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
