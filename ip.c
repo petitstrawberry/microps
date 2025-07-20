@@ -228,11 +228,73 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
 }
 
 static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
-                            size_t len, ip_addr_t dst) {}
+                            size_t len, ip_addr_t dst) {
+    uint8_t hwaddr[NET_DEVICE_ADDR_LEN] = {};
+    if (NET_IFACE(iface)->dev->flags & NET_DEVICE_FLAG_NEED_ARP) {
+        if (dst == iface->broadcast || dst == IP_ADDR_BROADCAST) {
+            memcpy(hwaddr, NET_IFACE(iface)->dev->broadcast,
+                   NET_IFACE(iface)->dev->alen);
+        } else {
+            errorf("arp does not implement");
+            return -1;
+        }
+    }
+
+    return net_device_output(NET_IFACE(iface)->dev, hwaddr, data, len, dst);
+}
 
 static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
                               const uint8_t *data, size_t len, ip_addr_t src,
-                              ip_addr_t dst, uint16_t id, uint16_t offset) {}
+                              ip_addr_t dst, uint16_t id, uint16_t offset) {
+    uint8_t buf[IP_TOTAL_SIZE_MAX];
+    struct ip_hdr *hdr;
+    uint16_t hlen, total;
+    char addr[IP_ADDR_STR_LEN];
+
+    hdr = (struct ip_hdr *)buf;
+
+    // Generate the IP datagram
+    // Header
+    hlen = IP_HDR_SIZE_MIN;  // Fixed header length
+    total = hlen + len;      // Total length of the IP datagram
+    if (total > IP_TOTAL_SIZE_MAX) {
+        errorf("too long, total=%u > %u", total, IP_TOTAL_SIZE_MAX);
+        return -1;
+    }
+    hdr->vhl =
+        (IP_VERSION_IPV4 << 4) | (hlen >> 2);  // Version and header length
+    hdr->tos = 0;                              // Type of service
+    hdr->total = ntoh16(total);                // Total length
+    hdr->id = ntoh16(id);                      // Identification
+    hdr->offset = ntoh16(offset);              // Fragment offset
+    hdr->ttl = 255;                            // Time to live
+    hdr->protocol = protocol;                  // Protocol
+    hdr->sum = 0;    // Checksum (will be calculated later)
+    hdr->src = src;  // Source address
+    hdr->dst = dst;  // Destination address
+
+    // Calculate the checksum
+    hdr->sum = cksum16((uint16_t *)buf, hlen, 0);
+    if (hdr->sum != 0) {
+        errorf("invalid checksum: hdr->sum=0x%04x, calc=0x%04x",
+               ntoh16(hdr->sum), cksum16((uint16_t *)buf, hlen, 0));
+        return -1;
+    }
+
+    // Copy the payload data
+    if (len > 0) {
+        if (len > IP_PAYLOAD_SIZE_MAX) {
+            errorf("too long, len=%zu > %zu", len, IP_PAYLOAD_SIZE_MAX);
+            return -1;
+        }
+    }
+    memcpy(buf + hlen, data, len);
+
+    debugf("dev=%s, dst=%s, protocol=%u, len=%u", NET_IFACE(iface)->dev->name,
+           ip_addr_ntop(dst, addr, sizeof(addr)), protocol, total);
+    ip_dump(buf, total);
+    return ip_output_device(iface, buf, total, dst);
+}
 
 static uint16_t ip_generate_id(void) {
     static mutex_t mutex = MUTEX_INITIALIZER;
@@ -246,7 +308,49 @@ static uint16_t ip_generate_id(void) {
 }
 
 ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
-                  ip_addr_t src, ip_addr_t dst) {}
+                  ip_addr_t src, ip_addr_t dst) {
+    struct ip_iface *iface;
+    char addr[IP_ADDR_STR_LEN];
+    uint16_t id;
+    if (src == IP_ADDR_ANY) {
+        errorf("ip routing does not implement");
+        return -1;
+    } else { /* NOTE: I'll rewrite this block later. */
+        iface = ip_iface_select(src);
+        if (!iface) {
+            errorf("no matching interface for source address: %s",
+                   ip_addr_ntop(src, addr, sizeof(addr)));
+            return -1;
+        }
+        // Check if the destination address is for this interface
+        // interface network range or broadcast
+        if ((iface->unicast & iface->netmask) != (dst & iface->netmask) &&
+            dst != iface->broadcast) {
+            errorf(
+                "not for this interface: dev=%s, unicast=%s, broadcast=%s, "
+                "dst=%s",
+                NET_IFACE(iface)->dev->name,
+                ip_addr_ntop(iface->unicast, addr, sizeof(addr)),
+                ip_addr_ntop(iface->broadcast, addr, sizeof(addr)),
+                ip_addr_ntop(dst, addr, sizeof(addr)));
+            return -1;
+        }
+    }
+
+    if (NET_IFACE(iface)->dev->mtu < IP_HDR_SIZE_MIN + len) {
+        errorf("too long, dev=%s, mtu=%u < %zu", NET_IFACE(iface)->dev->name,
+               NET_IFACE(iface)->dev->mtu, IP_HDR_SIZE_MIN + len);
+        return -1;
+    }
+
+    id = ip_generate_id();
+    if (ip_output_core(iface, protocol, data, len, iface->unicast, dst, id,
+                       0) == -1) {
+        errorf("ip_output_core() failure");
+        return -1;
+    }
+    return len;
+}
 
 int ip_init(void) {
     if (net_protocol_register(NET_PROTOCOL_TYPE_IP, ip_input) == -1) {
