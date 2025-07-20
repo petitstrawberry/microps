@@ -230,6 +230,7 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
 static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
                             size_t len, ip_addr_t dst) {
     uint8_t hwaddr[NET_DEVICE_ADDR_LEN] = {};
+
     if (NET_IFACE(iface)->dev->flags & NET_DEVICE_FLAG_NEED_ARP) {
         if (dst == iface->broadcast || dst == IP_ADDR_BROADCAST) {
             memcpy(hwaddr, NET_IFACE(iface)->dev->broadcast,
@@ -275,9 +276,9 @@ static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
 
     // Calculate the checksum
     hdr->sum = cksum16((uint16_t *)buf, hlen, 0);
-    if (hdr->sum != 0) {
-        errorf("invalid checksum: hdr->sum=0x%04x, calc=0x%04x",
-               ntoh16(hdr->sum), cksum16((uint16_t *)buf, hlen, 0));
+    // Validate the checksum
+    if (checksum16((uint16_t *)buf, hlen, hdr->sum) != 0) {
+        errorf("invalid checksum: hdr->sum=0x%04x", ntoh16(hdr->sum));
         return -1;
     }
 
