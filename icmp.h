@@ -15,24 +15,6 @@
 #define ICMP_TYPE_INFO_REQUEST       15
 #define ICMP_TYPE_INFO_REPLY         16
 
-
 extern int icmp_init(void);
-
-struct icmp_hdr {
-    uint8_t type;
-    uint8_t code;
-    uint16_t sum;
-    uint32_t values;
-};
-
-struct icmp_echo {
-    uint8_t type;
-    uint8_t code;
-    uint16_t sum;
-    uint16_t id;
-    uint16_t seq;
-};
-
-static void icmp_dump(const uint8_t *data, size_t len) {}
 
 #endif
