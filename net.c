@@ -5,9 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "arp.h"
 #include "ip.h"
 #include "platform.h"
 #include "util.h"
+#include "icmp.h"
 
 struct net_protocol {
     struct net_protocol *next;
@@ -102,31 +104,33 @@ int net_device_add_iface(struct net_device *dev, struct net_iface *iface) {
         }
     }
 
-    entry = memory_alloc(sizeof(*entry));
-    if (!entry) {
-        errorf("memory_alloc() failure");
-        return -1;
-    }
-
-    memcpy(entry, iface, sizeof(*iface));
-    entry->next = dev->ifaces;
-    dev->ifaces = entry;
+    iface->next = dev->ifaces;
     iface->dev = dev;
+    dev->ifaces = iface;
 
     return 0;
 }
 
 struct net_iface *net_device_get_iface(struct net_device *dev, int family) {
     struct net_iface *iface;
-    
+
+    debugf("Looking for interface on device %s with family %d", dev->name, family);
     iface = dev->ifaces;
+    int count = 0;
     while (iface != NULL) {
+        debugf("Interface %d: pointer=%p, family=%d", count, iface, iface->family);
+        if (iface->family == NET_IFACE_FAMILY_IP) {
+            debugf("  IP interface unicast=0x%08x", ((struct ip_iface *)iface)->unicast);
+        }
         if (iface->family == family) {
+            debugf("Found matching interface with family %d", family);
             return iface;
         }
         iface = iface->next;
+        count++;
     }
 
+    debugf("No interface found with family %d", family);
     return NULL;
 }
 
@@ -265,6 +269,11 @@ void net_shutdown(void) {
 int net_init(void) {
     if (intr_init() == -1) {
         errorf("intr_init() failure");
+        return -1;
+    }
+
+    if (arp_init() == -1) {
+        errorf("arp_init() failure");
         return -1;
     }
 
