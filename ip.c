@@ -33,6 +33,14 @@ struct ip_protocol {
                     ip_addr_t dst, struct ip_iface *iface);
 };
 
+struct ip_route {
+    struct ip_route *next;
+    ip_addr_t network;
+    ip_addr_t netmask;
+    ip_addr_t nexthop;
+    struct ip_iface *iface;
+};
+
 const ip_addr_t IP_ADDR_ANY = 0x00000000;       /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
 
@@ -40,6 +48,7 @@ const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
  * protect these lists with a mutex. */
 static struct ip_iface *ifaces;
 static struct ip_protocol *protocols;
+static struct ip_route *routes;
 
 int ip_addr_pton(const char *p, ip_addr_t *n) {
     char *sp, *ep;
@@ -102,6 +111,18 @@ static void ip_dump(const uint8_t *data, size_t len) {
 #endif
     funlockfile(stderr);
 }
+
+/* NOTE: must not be call after net_run() */
+static struct ip_route *ip_route_add(ip_addr_t network, ip_addr_t netmask,
+                                     ip_addr_t nexthop,
+                                     struct ip_iface *iface) {}
+
+static struct ip_route *ip_route_lookup(ip_addr_t dst) {}
+
+/* NOTE: must not be call after net_run() */
+int ip_route_set_default_gateway(struct ip_iface *iface, const char *gateway) {}
+
+struct ip_iface *ip_route_get_iface(ip_addr_t dst) {}
 
 struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {
     struct ip_iface *iface;
@@ -292,8 +313,8 @@ static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
                 errorf("arp_resolve() failure");
                 return -1;
             } else if (ret == 0) {
-                errorf("arp resolve failure, dst=%s", ip_addr_ntop(dst, hwaddr,
-                                                                   sizeof(hwaddr)));
+                errorf("arp resolve failure, dst=%s",
+                       ip_addr_ntop(dst, hwaddr, sizeof(hwaddr)));
                 return -1;
             }
         }
@@ -375,26 +396,6 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
     if (src == IP_ADDR_ANY) {
         errorf("ip routing does not implement");
         return -1;
-    } else { /* NOTE: I'll rewrite this block later. */
-        iface = ip_iface_select(src);
-        if (!iface) {
-            errorf("no matching interface for source address: %s",
-                   ip_addr_ntop(src, addr, sizeof(addr)));
-            return -1;
-        }
-        // Check if the destination address is for this interface
-        // interface network range or broadcast
-        if ((iface->unicast & iface->netmask) != (dst & iface->netmask) &&
-            dst != iface->broadcast) {
-            errorf(
-                "not for this interface: dev=%s, unicast=%s, broadcast=%s, "
-                "dst=%s",
-                NET_IFACE(iface)->dev->name,
-                ip_addr_ntop(iface->unicast, addr, sizeof(addr)),
-                ip_addr_ntop(iface->broadcast, addr, sizeof(addr)),
-                ip_addr_ntop(dst, addr, sizeof(addr)));
-            return -1;
-        }
     }
 
     if (NET_IFACE(iface)->dev->mtu < IP_HDR_SIZE_MIN + len) {
