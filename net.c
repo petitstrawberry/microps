@@ -4,12 +4,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "arp.h"
+#include "icmp.h"
 #include "ip.h"
 #include "platform.h"
 #include "util.h"
-#include "icmp.h"
 
 struct net_protocol {
     struct net_protocol *next;
@@ -24,10 +25,18 @@ struct net_protocol_queue_entry {
     uint8_t data[];
 };
 
+struct net_timer {
+    struct net_timer *next;
+    struct timeval interval;
+    struct timeval last;
+    void (*handler)(void);
+};
+
 /* NOTE: if you want to add/delete the entries after net_run(), you need to
  * protect these lists with a mutex. */
 static struct net_device *devices;
 static struct net_protocol *protocols;
+static struct net_timer *timers;
 
 struct net_device *net_device_alloc(void) {
     struct net_device *dev;
@@ -114,13 +123,16 @@ int net_device_add_iface(struct net_device *dev, struct net_iface *iface) {
 struct net_iface *net_device_get_iface(struct net_device *dev, int family) {
     struct net_iface *iface;
 
-    debugf("Looking for interface on device %s with family %d", dev->name, family);
+    debugf("Looking for interface on device %s with family %d", dev->name,
+           family);
     iface = dev->ifaces;
     int count = 0;
     while (iface != NULL) {
-        debugf("Interface %d: pointer=%p, family=%d", count, iface, iface->family);
+        debugf("Interface %d: pointer=%p, family=%d", count, iface,
+               iface->family);
         if (iface->family == NET_IFACE_FAMILY_IP) {
-            debugf("  IP interface unicast=0x%08x", ((struct ip_iface *)iface)->unicast);
+            debugf("  IP interface unicast=0x%08x",
+                   ((struct ip_iface *)iface)->unicast);
         }
         if (iface->family == family) {
             debugf("Found matching interface with family %d", family);
@@ -184,6 +196,11 @@ int net_protocol_register(uint16_t type,
     infof("registered, type=0x%04x", type);
     return 0;
 }
+
+/* NOTE: must not be call after net_run() */
+int net_timer_register(struct timeval interval, void (*handler)(void)) {}
+
+int net_timer_handler(void) {}
 
 int net_input_handler(uint16_t type, const uint8_t *data, size_t len,
                       struct net_device *dev) {

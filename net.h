@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/time.h>
 
 #ifndef IFNAMSIZ
 #define IFNAMSIZ 16
@@ -35,7 +36,9 @@
 
 struct net_device {
     struct net_device *next;
-    struct net_iface *ifaces; /* NOTE: if you want to add/delete the entries after net_run(), you need to protect ifaces with a mutex. */
+    struct net_iface
+        *ifaces; /* NOTE: if you want to add/delete the entries after net_run(),
+                    you need to protect ifaces with a mutex. */
     unsigned int index;
     char name[IFNAMSIZ];
     uint16_t type;
@@ -68,7 +71,8 @@ struct net_iface {
 
 extern struct net_device *net_device_alloc(void);
 extern int net_device_register(struct net_device *dev);
-extern int net_device_add_iface(struct net_device *dev, struct net_iface *iface);
+extern int net_device_add_iface(struct net_device *dev,
+                                struct net_iface *iface);
 extern struct net_iface *net_device_get_iface(struct net_device *dev,
                                               int family);
 extern int net_device_output(struct net_device *dev, uint16_t type,
@@ -77,6 +81,8 @@ extern int net_protocol_register(uint16_t type,
                                  void (*handler)(const uint8_t *data,
                                                  size_t len,
                                                  struct net_device *dev));
+extern int net_timer_register(struct timeval interval, void (*handler)(void));
+extern int net_timer_handler(void);
 extern int net_input_handler(uint16_t type, const uint8_t *data, size_t len,
                              struct net_device *dev);
 extern int net_softirq_handler(void);

@@ -20,6 +20,7 @@
 #define ARP_OP_REPLY 2
 
 #define ARP_CACHE_SIZE 32
+#define ARP_CACHE_TIMEOUT 30 /* seconds */
 
 #define ARP_CACHE_STATE_FREE 0
 #define ARP_CACHE_STATE_INCOMPLETE 1
@@ -189,18 +190,19 @@ static int arp_request(struct net_iface *iface, ip_addr_t tpa) {
     request.hdr.pln = IP_ADDR_LEN;
     request.hdr.op = hton16(ARP_OP_REQUEST);
     // Set sender protocol address (our IP address)
-    memcpy(request.spa, &((struct ip_iface *)iface)->unicast, sizeof(request.spa));
+    memcpy(request.spa, &((struct ip_iface *)iface)->unicast,
+           sizeof(request.spa));
     // Set sender hardware address (our MAC address)
     memcpy(request.sha, NET_IFACE(iface)->dev->addr, ETHER_ADDR_LEN);
     // Set target protocol address (requester's IP address)
     memcpy(request.tpa, &tpa, sizeof(request.tpa));
     // Set target hardware address (requester's MAC address)
-    memset(request.tha, 0, ETHER_ADDR_LEN); // Unknown at this point
+    memset(request.tha, 0, ETHER_ADDR_LEN);  // Unknown at this point
     debugf("dev=%s, len=%zu", iface->dev->name, sizeof(request));
     arp_dump((uint8_t *)&request, sizeof(request));
 
     return net_device_output(NET_IFACE(iface)->dev, ETHER_TYPE_ARP,
-                             (uint8_t *)&request, sizeof(request), 
+                             (uint8_t *)&request, sizeof(request),
                              NET_IFACE(iface)->dev->broadcast);
 }
 
@@ -305,14 +307,13 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha) {
     mutex_lock(&mutex);
     cache = arp_cache_select(pa);
     if (!cache) {
-
         cache = arp_cache_alloc();
         if (!cache) {
             errorf("arp_cache_alloc() failure");
             mutex_unlock(&mutex);
             return ARP_RESOLVE_ERROR;
         }
-        
+
         cache->state = ARP_CACHE_STATE_INCOMPLETE;
         memcpy(&cache->pa, &pa, sizeof(cache->pa));
         gettimeofday(&cache->timestamp, NULL);
@@ -332,6 +333,8 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha) {
            ether_addr_ntop(ha, addr2, sizeof(addr2)));
     return ARP_RESOLVE_FOUND;
 }
+
+static void arp_timer_handler(void) {}
 
 int arp_init(void) {
     if (net_protocol_register(NET_PROTOCOL_TYPE_ARP, arp_input) == -1) {
