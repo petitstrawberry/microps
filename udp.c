@@ -187,7 +187,7 @@ static void udp_input(const uint8_t *data, size_t len, ip_addr_t src,
     entry->len = len - sizeof(*hdr);
     memcpy(entry->data, data + sizeof(*hdr), entry->len);
     entry->foreign.addr = src;
-    entry->foreign.port = ntoh16(hdr->src);
+    entry->foreign.port = hdr->src;
     queue_push(&pcb->queue, entry);
 
     debugf("queue pushed: id=%d, num=%d", udp_pcb_id(pcb), pcb->queue.num);
@@ -327,7 +327,11 @@ ssize_t udp_sendto(int id, uint8_t *data, size_t len,
     struct ip_endpoint local;
     struct ip_iface *iface;
     char addr[IP_ADDR_STR_LEN];
+    char ep[IP_ENDPOINT_STR_LEN];
     uint32_t p;
+
+    debugf("udp_sendto: sending to %s", 
+           ip_endpoint_ntop(foreign, ep, sizeof(ep)));
 
     mutex_lock(&mutex);
     pcb = udp_pcb_get(id);
@@ -403,6 +407,9 @@ ssize_t udp_recvfrom(int id, uint8_t *buf, size_t size,
     mutex_unlock(&mutex);
     if (foreign) {
         *foreign = entry->foreign;
+        char ep[IP_ENDPOINT_STR_LEN];
+        debugf("udp_recvfrom: setting foreign to %s", 
+               ip_endpoint_ntop(foreign, ep, sizeof(ep)));
     }
     len = MIN(size, entry->len); /* truncate */
     memcpy(buf, entry->data, len);
