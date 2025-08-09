@@ -256,7 +256,7 @@ int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
 
     // Add ip route for the interface
     ip_route_add(iface->unicast & iface->netmask, iface->netmask,
-                 iface->unicast, iface);
+                 IP_ADDR_ANY, iface);
 
     // Add the interface to the global list
     iface->next = ifaces;
