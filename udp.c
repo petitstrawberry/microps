@@ -1,5 +1,6 @@
 #include "udp.h"
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -238,6 +239,8 @@ ssize_t udp_output(struct ip_endpoint *src, struct ip_endpoint *dst,
     return ip_output(IP_PROTOCOL_UDP, buf, total, src->addr, dst->addr);
 }
 
+static void event_handler(void *arg) {}
+
 int udp_init(void) {
     struct udp_pcb *pcb;
 
@@ -330,7 +333,7 @@ ssize_t udp_sendto(int id, uint8_t *data, size_t len,
     char ep[IP_ENDPOINT_STR_LEN];
     uint32_t p;
 
-    debugf("udp_sendto: sending to %s", 
+    debugf("udp_sendto: sending to %s",
            ip_endpoint_ntop(foreign, ep, sizeof(ep)));
 
     mutex_lock(&mutex);
@@ -408,7 +411,7 @@ ssize_t udp_recvfrom(int id, uint8_t *buf, size_t size,
     if (foreign) {
         *foreign = entry->foreign;
         char ep[IP_ENDPOINT_STR_LEN];
-        debugf("udp_recvfrom: setting foreign to %s", 
+        debugf("udp_recvfrom: setting foreign to %s",
                ip_endpoint_ntop(foreign, ep, sizeof(ep)));
     }
     len = MIN(size, entry->len); /* truncate */
