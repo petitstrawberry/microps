@@ -1,5 +1,6 @@
 #include "tcp.h"
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -218,9 +219,11 @@ static ssize_t tcp_output_segment(uint32_t seq, uint32_t ack, uint8_t flg,
     psum = ~cksum16((uint16_t *)&pseudo, sizeof(pseudo), 0);
     hdr->sum = cksum16((uint16_t *)hdr, total, psum);
     debugf("%s => %s, len=%u (payload=%zu)",
-        ip_endpoint_ntop(local, ep1, sizeof(ep1)), ip_endpoint_ntop(foreign, ep2, sizeof(ep2)), total, len);
+           ip_endpoint_ntop(local, ep1, sizeof(ep1)),
+           ip_endpoint_ntop(foreign, ep2, sizeof(ep2)), total, len);
     tcp_dump((uint8_t *)hdr, total);
-    if (ip_output(IP_PROTOCOL_TCP, (uint8_t *)hdr, total, local->addr, foreign->addr) == -1) {
+    if (ip_output(IP_PROTOCOL_TCP, (uint8_t *)hdr, total, local->addr,
+                  foreign->addr) == -1) {
         return -1;
     }
     return len;
@@ -261,7 +264,88 @@ static void tcp_segment_arrives(struct tcp_segment_info *seg, uint8_t flags,
         }
         return;
     }
-    /* implemented in the next step */
+    switch (pcb->state) {
+        case TCP_PCB_STATE_LISTEN:
+            /*
+             * 1st check for an RST
+             */
+
+            /*
+             * 2nd check for an ACK
+             */
+
+            /*
+             * 3rd check for an SYN
+             */
+
+            /*
+             * 4th other text or control
+             */
+
+            /* drop segment */
+            return;
+        case TCP_PCB_STATE_SYN_SENT:
+            /*
+             * 1st check the ACK bit
+             */
+
+            /*
+             * 2nd check the RST bit
+             */
+
+            /*
+             * 3rd check security and precedence (ignore)
+             */
+
+            /*
+             * 4th check the SYN bit
+             */
+
+            /*
+             * 5th, if neither of the SYN or RST bits is set then drop the
+             * segment and return
+             */
+
+            /* drop segment */
+            return;
+    }
+    /*
+     * Otherwise
+     */
+
+    /*
+     * 1st check sequence number
+     */
+
+    /*
+     * 2nd check the RST bit
+     */
+
+    /*
+     * 3rd check security and precedence (ignore)
+     */
+
+    /*
+     * 4th check the SYN bit
+     */
+
+    /*
+     * 5th check the ACK field
+     */
+
+    /*
+     * 6th, check the URG bit (ignore)
+     */
+
+    /*
+     * 7th, process the segment text
+     */
+
+    /*
+     * 8th, check the FIN bit
+     */
+
+    return;
 }
 
 static void tcp_input(const uint8_t *data, size_t len, ip_addr_t src,
@@ -329,10 +413,32 @@ static void tcp_input(const uint8_t *data, size_t len, ip_addr_t src,
     return;
 }
 
+static void event_handler(void *arg) {
+    struct tcp_pcb *pcb;
+
+    mutex_lock(&mutex);
+    for (pcb = pcbs; pcb < tailof(pcbs); pcb++) {
+        if (pcb->state != TCP_PCB_STATE_FREE) {
+            sched_interrupt(&pcb->ctx);
+        }
+    }
+    mutex_unlock(&mutex);
+}
 
 int tcp_init(void) {
     if (ip_protocol_register(IP_PROTOCOL_TCP, tcp_input) == -1) {
         errorf("ip_protocol_register() failure");
         return -1;
     }
+    net_event_subscribe(event_handler, NULL);
+    return 0;
 }
+
+/*
+ * TCP User Command (RFC793)
+ */
+
+int tcp_open_rfc793(struct ip_endpoint *local, struct ip_endpoint *foreign,
+                    int active) {}
+
+int tcp_close(int id) {}
