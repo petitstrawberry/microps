@@ -402,13 +402,8 @@ static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
                    NET_IFACE(iface)->dev->alen);
         } else {
             ret = arp_resolve(NET_IFACE(iface), dst, hwaddr);
-            if (ret == -1) {
-                errorf("arp_resolve() failure");
-                return -1;
-            } else if (ret == 0) {
-                errorf("arp resolve failure, dst=%s",
-                       ip_addr_ntop(dst, hwaddr, sizeof(hwaddr)));
-                return -1;
+            if (ret != ARP_RESOLVE_FOUND) {
+                return ret;
             }
         }
     }
