@@ -309,22 +309,22 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha) {
     if (!cache) {
         cache = arp_cache_alloc();
         if (!cache) {
-            errorf("arp_cache_alloc() failure");
             mutex_unlock(&mutex);
+            errorf("arp_cache_alloc() failure");
             return ARP_RESOLVE_ERROR;
         }
-
         cache->state = ARP_CACHE_STATE_INCOMPLETE;
-        memcpy(&cache->pa, &pa, sizeof(cache->pa));
+        cache->pa = pa;
         gettimeofday(&cache->timestamp, NULL);
-
-        mutex_unlock(&mutex);
         arp_request(iface, pa);
-        return ARP_CACHE_STATE_INCOMPLETE;
+        mutex_unlock(&mutex);
+        debugf("cache not found, pa=%s",
+               ip_addr_ntop(pa, addr1, sizeof(addr1)));
+        return ARP_RESOLVE_INCOMPLETE;
     }
     if (cache->state == ARP_CACHE_STATE_INCOMPLETE) {
-        mutex_unlock(&mutex);
         arp_request(iface, pa); /* just in case packet loss */
+        mutex_unlock(&mutex);
         return ARP_RESOLVE_INCOMPLETE;
     }
     memcpy(ha, cache->ha, ETHER_ADDR_LEN);
