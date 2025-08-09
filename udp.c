@@ -173,13 +173,13 @@ static void udp_input(const uint8_t *data, size_t len, ip_addr_t src,
         return;
     }
 
-    entry = memory_alloc(sizeof(*entry));
+    entry = memory_alloc(sizeof(*entry) + (len - sizeof(*hdr)));
     if (!entry) {
         mutex_unlock(&mutex);
         return;
     }
-    entry->len = len;
-    memcpy(entry->data, data, len);
+    entry->len = len - sizeof(*hdr);
+    memcpy(entry->data, data + sizeof(*hdr), entry->len);
     entry->foreign.addr = src;
     entry->foreign.port = ntoh16(hdr->src);
     queue_push(&pcb->queue, entry);
